@@ -1,8 +1,8 @@
 # LLMage
 
-LLM-based art localization pipeline. Extracts visible text from UI screenshots and images, translates it using an LLM, and reinserts the translated text back into the original asset — ready for MATUA / AT Art Review.
+LLM-based art localization pipeline. Extracts visible text from UI screenshots and images, translates it using an LLM via Azure AI Foundry, and reinserts the translated text back into the original asset — ready for MATUA / AT Art Review.
 
-Built to operate fully outside of iCMS. No iCMS integration, no auto-publishing.
+Built to operate fully outside of iCMS. No iCMS integration, no auto-publishing. No external API keys — all auth via Azure Managed Identity / `az login`.
 
 ---
 
@@ -17,7 +17,7 @@ Source image (en-US)
   OCR extraction          ← Azure AI Document Intelligence or EasyOCR (local)
        │
        ▼
-  LLM translation         ← Claude via Azure AI Foundry + One Term glossary
+  LLM translation         ← Claude (or any model) via Azure AI Foundry + One Term glossary
        │
        ▼
   Text reinsertion        ← Pillow
@@ -54,7 +54,7 @@ Source image (en-US)
 
 ```
 LLMage/
-├── .env.example                  # copy to .env and fill in keys
+├── .env.example                  # copy to .env and fill in your endpoints
 ├── requirements.txt
 ├── config.py                     # all settings in one place
 ├── main.py                       # run the full pipeline on a file or folder
@@ -65,13 +65,13 @@ LLMage/
 ├── pipeline/
 │   ├── eligibility.py            # Step 1:  file type check
 │   ├── extractor.py              # Step 3:  OCR text extraction + bounding boxes
-│   ├── translator.py             # Step 4:  LLM translation
+│   ├── translator.py             # Step 4:  LLM translation via Azure AI Foundry
 │   ├── reinsert.py               # Step 5:  text reinsertion into asset
 │   ├── packager.py               # Step 6:  MATUA review ZIP creation
 │   └── metrics.py                # Step 10: pass/fail/escalation logging
 └── tests/
     ├── test_ocr.py               # OCR only — validate extraction on samples
-    └── test_extract_reinsert.py  # Extract + stub translate + reinsert (no API keys needed)
+    └── test_extract_reinsert.py  # Extract + translate + reinsert end-to-end
 ```
 
 ---
@@ -82,6 +82,7 @@ LLMage/
 
 - Python 3.10+
 - pip
+- Azure CLI (`az login`) for authentication
 
 ### 2. Install dependencies
 
@@ -91,20 +92,28 @@ pip install -r requirements.txt
 
 > First run will download EasyOCR models (~200 MB). This is automatic and one-time only.
 
-### 3. Configure environment
+### 3. Login to Azure
+
+```bash
+az login
+```
+
+This is the only auth step needed. No API keys, no personal billing.
+
+### 4. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and set what you have. The endpoint alone is enough to switch to Azure — no key required if using Managed Identity.
-
 ```env
-# Set endpoint to use Azure. Leave blank to use EasyOCR locally.
+# OCR — set endpoint to switch from EasyOCR to Azure automatically
+# Leave KEY blank to use az login / Managed Identity (recommended)
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-resource>.cognitiveservices.azure.com/
-AZURE_DOCUMENT_INTELLIGENCE_KEY=   # optional — leave blank to use az login / Managed Identity
+AZURE_DOCUMENT_INTELLIGENCE_KEY=
 
-# Azure AI Foundry — for LLM translation (no API keys, uses az login / Managed Identity)
+# LLM Translation — Azure AI Foundry
+# Change AZURE_FOUNDRY_MODEL to compare different models (e.g. gpt-4o, claude-sonnet-4-6)
 AZURE_FOUNDRY_ENDPOINT=https://<your-foundry-resource>.services.ai.azure.com/models
 AZURE_FOUNDRY_MODEL=claude-sonnet-4-6
 
@@ -115,16 +124,16 @@ TARGET_LANGUAGE=it-IT
 
 ## Running
 
-### Test extraction + reinsertion (no API keys needed)
-
-Validates that text is correctly extracted and reinserted into the source images.
-Uses a stub translation (`[IT: original text]`) so you can visually verify bounding box positions.
+### Test extraction + translation + reinsertion
 
 ```bash
 python -m tests.test_extract_reinsert
 ```
 
-Output images are saved to:
+- If `AZURE_FOUNDRY_ENDPOINT` is set → uses real LLM translation via Foundry
+- If not set → falls back to stub `[IT: original text]` so OCR and reinsertion can be validated without Foundry access
+
+Output images saved to:
 ```
 output/test_reinsert/
   select-everyone_it-IT.png
@@ -157,18 +166,36 @@ Output packages (MATUA review ZIPs) are saved to `output/packages/`.
 
 ## OCR Backend
 
-The pipeline auto-selects the OCR backend based on your `.env`:
+Auto-selected based on `.env`:
 
 | Condition | Backend | Auth |
 |-----------|---------|------|
-| Endpoint set, no key | Azure AI Document Intelligence | Managed Identity / `az login` |
+| Endpoint set, no key | Azure AI Document Intelligence | `az login` / Managed Identity |
 | Endpoint set, key set | Azure AI Document Intelligence | API key |
 | No endpoint | EasyOCR (local) | None |
 
 To set up Azure AI Document Intelligence:
 1. Go to [portal.azure.com](https://portal.azure.com)
 2. Create resource → search **Document Intelligence**
-3. Copy the endpoint into `.env` — run `az login` locally, no key needed
+3. Copy the endpoint into `.env` — no key needed when using `az login`
+
+---
+
+## Translation Backend
+
+All translation goes through **Azure AI Foundry** using `DefaultAzureCredential` — enterprise-safe, no external API keys, no personal billing.
+
+To switch or compare models, change `AZURE_FOUNDRY_MODEL` in `.env`:
+
+```env
+AZURE_FOUNDRY_MODEL=claude-sonnet-4-6   # default
+AZURE_FOUNDRY_MODEL=gpt-4o              # or any other model deployed in your Foundry
+```
+
+To set up Azure AI Foundry:
+1. Go to [ai.azure.com](https://ai.azure.com)
+2. Open your project → **Deployments** → deploy a model (Claude or GPT)
+3. Copy the endpoint into `.env`
 
 ---
 
@@ -181,7 +208,7 @@ Each processed asset produces a ZIP following the MATUA / AT Art Review structur
   original.<ext>          source image
   localized.<ext>         LLM-localized image
   text_mapping.json       source ↔ translated string pairs
-  metadata.json           language info, pipeline version, string count
+  metadata.json           language info, model used, string count
 ```
 
 ---
