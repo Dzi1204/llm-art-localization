@@ -1,9 +1,11 @@
 """
-End-to-end test: Extract text → stub translation → reinsert → save output image.
+End-to-end test: Extract text → translate → reinsert → save output image.
 
-No Azure, no LLM API keys needed.
-The stub translation marks each string as [IT: ...] so you can visually
-confirm text was extracted and reinserted in the correct positions.
+Requires:
+  - AZURE_FOUNDRY_ENDPOINT set in .env  (for real translation)
+  - az login                             (for auth)
+
+Falls back to stub translation [IT: ...] if Foundry endpoint is not configured.
 
 Run with:
     python -m tests.test_extract_reinsert
@@ -15,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from pipeline.extractor import _extract_via_easyocr, has_localizable_text, TextBlock
 from pipeline.reinsert import reinsert_raster
-from config import EASYOCR_LANGUAGES, SOURCE_LANGUAGE
+from config import EASYOCR_LANGUAGES, SOURCE_LANGUAGE, TARGET_LANGUAGE, AZURE_FOUNDRY_ENDPOINT
 
 SOURCE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "source-art")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "test_reinsert")
@@ -27,12 +29,9 @@ SOURCE_FILES = [
     "configuration-properties.png",
 ]
 
-TARGET_LANGUAGES = ["it-IT"]
 
-
-def stub_translate(blocks: list, target_lang: str) -> list:
-    """Placeholder — marks each block with the target language prefix until translator.py is wired in."""
-    prefix = target_lang.split("-")[0].upper()  # "it-IT" → "IT"
+def _stub_translate(blocks: list, target_lang: str) -> list:
+    prefix = target_lang.split("-")[0].upper()
     return [
         TextBlock(
             text=f"[{prefix}: {b.text}]",
@@ -47,9 +46,17 @@ def stub_translate(blocks: list, target_lang: str) -> list:
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    print(f"Source language : {SOURCE_LANGUAGE}")
-    print(f"Target language : {TARGET_LANGUAGES[0]}  (stub only — real translation not wired yet)")
-    print(f"Output dir      : {OUTPUT_DIR}\n")
+
+    use_llm = bool(AZURE_FOUNDRY_ENDPOINT)
+    mode = "Azure AI Foundry (Claude)" if use_llm else "stub [IT: ...]  — set AZURE_FOUNDRY_ENDPOINT in .env for real translation"
+
+    print(f"Source   : {SOURCE_LANGUAGE}")
+    print(f"Target   : {TARGET_LANGUAGE}")
+    print(f"Translator: {mode}")
+    print(f"Output   : {OUTPUT_DIR}\n")
+
+    if use_llm:
+        from pipeline.translator import translate_blocks
 
     for filename in SOURCE_FILES:
         path = os.path.join(SOURCE_DIR, filename)
@@ -75,14 +82,17 @@ def main():
             print("  → Skipped (NoLoc)\n")
             continue
 
-        # Step 5 – Reinsert with stub
-        for lang in TARGET_LANGUAGES:
-            translated = stub_translate(blocks, lang)
-            out_path = os.path.join(OUTPUT_DIR, f"{name}_{lang}.png")
-            reinsert_raster(path, blocks, translated, out_path)
-            print(f"\n  → {lang} saved: {os.path.basename(out_path)}")
+        # Step 4 – Translate
+        if use_llm:
+            print(f"\n  Translating via Foundry ({TARGET_LANGUAGE})...")
+            translated = translate_blocks(blocks, SOURCE_LANGUAGE, TARGET_LANGUAGE)
+        else:
+            translated = _stub_translate(blocks, TARGET_LANGUAGE)
 
-        print()
+        # Step 5 – Reinsert
+        out_path = os.path.join(OUTPUT_DIR, f"{name}_{TARGET_LANGUAGE}.png")
+        reinsert_raster(path, blocks, translated, out_path)
+        print(f"\n  → Saved: {os.path.basename(out_path)}\n")
 
 
 if __name__ == "__main__":

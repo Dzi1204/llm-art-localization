@@ -17,7 +17,7 @@ Source image (en-US)
   OCR extraction          ← Azure AI Document Intelligence or EasyOCR (local)
        │
        ▼
-  LLM translation         ← Claude (Anthropic) + One Term glossary
+  LLM translation         ← Claude via Azure AI Foundry + One Term glossary
        │
        ▼
   Text reinsertion        ← Pillow
@@ -104,7 +104,9 @@ Open `.env` and set what you have. The endpoint alone is enough to switch to Azu
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-resource>.cognitiveservices.azure.com/
 AZURE_DOCUMENT_INTELLIGENCE_KEY=   # optional — leave blank to use az login / Managed Identity
 
-ANTHROPIC_API_KEY=<your-key>
+# Azure AI Foundry — for LLM translation (no API keys, uses az login / Managed Identity)
+AZURE_FOUNDRY_ENDPOINT=https://<your-foundry-resource>.services.ai.azure.com/models
+AZURE_FOUNDRY_MODEL=claude-sonnet-4-6
 
 TARGET_LANGUAGE=it-IT
 ```

@@ -9,7 +9,10 @@ load_dotenv()
 #   2. API key fallback — only if AZURE_DOCUMENT_INTELLIGENCE_KEY is set in .env
 AZURE_ENDPOINT = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
 AZURE_KEY = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")  # leave blank to use DefaultAzureCredential
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+# Azure AI Foundry — used for LLM translation
+# Auth: DefaultAzureCredential (Managed Identity / az login) — no API keys required
+AZURE_FOUNDRY_ENDPOINT = os.getenv("AZURE_FOUNDRY_ENDPOINT")
+AZURE_FOUNDRY_MODEL = os.getenv("AZURE_FOUNDRY_MODEL", "claude-sonnet-4-6")
 TARGET_LANGUAGE = os.getenv("TARGET_LANGUAGE", "it-IT")
 
 # Source is always English — confirmed in iCMS Cedar (SourceFileIngestedEvent, en-US hardcoded)
