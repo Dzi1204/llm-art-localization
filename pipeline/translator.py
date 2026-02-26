@@ -1,16 +1,16 @@
 """
-Step 4 – Translate extracted text using Claude via Azure AI Foundry.
+Step 4 – Translate extracted text using an LLM.
 
-Auth: DefaultAzureCredential (Managed Identity / az login) — no API keys required.
-Set AZURE_FOUNDRY_ENDPOINT in .env to enable.
+Backend priority (auto-selected from .env):
+  1. Azure AI Foundry  — set AZURE_FOUNDRY_ENDPOINT  (enterprise, no personal key)
+  2. OpenAI            — set OPENAI_API_KEY           (dev fallback)
+
+If neither is set, raises EnvironmentError (caller should use stub translator).
 """
 
 from typing import List, Dict, Optional
-from azure.ai.inference import ChatCompletionsClient
-from azure.ai.inference.models import SystemMessage, UserMessage
-from azure.identity import DefaultAzureCredential
 
-from config import AZURE_FOUNDRY_ENDPOINT, AZURE_FOUNDRY_MODEL
+from config import AZURE_FOUNDRY_ENDPOINT, AZURE_FOUNDRY_MODEL, OPENAI_API_KEY, OPENAI_MODEL
 from pipeline.extractor import TextBlock
 
 
@@ -21,30 +21,26 @@ def translate_blocks(
     glossary: Optional[Dict[str, str]] = None,
 ) -> List[TextBlock]:
     """
-    Translates all TextBlocks via Azure AI Foundry.
+    Translates all TextBlocks via the configured LLM backend.
     Returns a new TextBlock list with translated text. Original blocks are not mutated.
     """
     if not blocks:
         return []
 
-    client = ChatCompletionsClient(
-        endpoint=AZURE_FOUNDRY_ENDPOINT,
-        credential=DefaultAzureCredential(),
-    )
-
     texts = [b.text for b in blocks]
     prompt = _build_prompt(texts, source_language, target_language, glossary)
 
-    response = client.complete(
-        model=AZURE_FOUNDRY_MODEL,
-        messages=[
-            SystemMessage("You are a professional software UI localization translator."),
-            UserMessage(prompt),
-        ],
-        max_tokens=4096,
-    )
+    if AZURE_FOUNDRY_ENDPOINT:
+        response_text = _translate_via_foundry(prompt)
+    elif OPENAI_API_KEY:
+        response_text = _translate_via_openai(prompt)
+    else:
+        raise EnvironmentError(
+            "No translation backend configured. "
+            "Set AZURE_FOUNDRY_ENDPOINT (Foundry) or OPENAI_API_KEY (OpenAI) in .env."
+        )
 
-    translated_texts = _parse_response(response.choices[0].message.content, len(texts))
+    translated_texts = _parse_response(response_text, len(texts))
 
     return [
         TextBlock(
@@ -56,6 +52,41 @@ def translate_blocks(
         )
         for original, translated in zip(blocks, translated_texts)
     ]
+
+
+def _translate_via_foundry(prompt: str) -> str:
+    from azure.ai.inference import ChatCompletionsClient
+    from azure.ai.inference.models import SystemMessage, UserMessage
+    from azure.identity import DefaultAzureCredential
+
+    client = ChatCompletionsClient(
+        endpoint=AZURE_FOUNDRY_ENDPOINT,
+        credential=DefaultAzureCredential(),
+    )
+    response = client.complete(
+        model=AZURE_FOUNDRY_MODEL,
+        messages=[
+            SystemMessage("You are a professional software UI localization translator."),
+            UserMessage(prompt),
+        ],
+        max_tokens=4096,
+    )
+    return response.choices[0].message.content
+
+
+def _translate_via_openai(prompt: str) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a professional software UI localization translator."},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=4096,
+    )
+    return response.choices[0].message.content
 
 
 def _build_prompt(
