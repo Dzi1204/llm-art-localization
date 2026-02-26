@@ -2,7 +2,7 @@
 End-to-end test: Extract text → stub translation → reinsert → save output image.
 
 No Azure, no LLM API keys needed.
-The stub translation marks each string as [SK: ...] or [IT: ...] so you can visually
+The stub translation marks each string as [IT: ...] so you can visually
 confirm text was extracted and reinserted in the correct positions.
 
 Run with:
@@ -17,8 +17,8 @@ from pipeline.extractor import _extract_via_easyocr, has_localizable_text, TextB
 from pipeline.reinsert import reinsert_raster
 from config import EASYOCR_LANGUAGES, SOURCE_LANGUAGE
 
-SOURCE_DIR = r"C:\Users\jdobrovodska\source\repos\Source Art Matua\Source Art Matua"
-OUTPUT_DIR = r"C:\Users\jdobrovodska\source\repos\LLM-MATUA-Pipeline\output\test_reinsert"
+SOURCE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "source-art")
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "test_reinsert")
 
 SOURCE_FILES = [
     "select-everyone.png",
@@ -27,7 +27,7 @@ SOURCE_FILES = [
     "configuration-properties.png",
 ]
 
-TARGET_LANGUAGES = ["sk-SK", "it-IT"]
+TARGET_LANGUAGES = ["it-IT"]
 
 
 def stub_translate(blocks: list, target_lang: str) -> list:
@@ -35,7 +35,7 @@ def stub_translate(blocks: list, target_lang: str) -> list:
     Placeholder — marks each block with the target language prefix.
     The data scientist will replace this with the real LLM translation prompt.
     """
-    prefix = target_lang.split("-")[0].upper()  # "sk-SK" → "SK"
+    prefix = target_lang.split("-")[0].upper()  # "it-IT" → "IT"
     return [
         TextBlock(
             text=f"[{prefix}: {b.text}]",
@@ -51,7 +51,7 @@ def stub_translate(blocks: list, target_lang: str) -> list:
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     print(f"Source language : {SOURCE_LANGUAGE}")
-    print(f"Target languages: {', '.join(TARGET_LANGUAGES)}")
+    print(f"Target language : {TARGET_LANGUAGES[0]}  (stub only — real translation not wired yet)")
     print(f"Output dir      : {OUTPUT_DIR}\n")
 
     for filename in SOURCE_FILES:
@@ -66,7 +66,7 @@ def main():
             print("  FILE NOT FOUND\n")
             continue
 
-        # Step 3 – Extract once, reuse for both languages
+        # Step 3 – Extract
         blocks = _extract_via_easyocr(path, languages=EASYOCR_LANGUAGES)
         localizable = has_localizable_text(blocks)
         print(f"  Blocks extracted : {len(blocks)}  |  Localizable : {localizable}\n")
@@ -78,7 +78,7 @@ def main():
             print("  → Skipped (NoLoc)\n")
             continue
 
-        # Step 5 – Reinsert for each target language
+        # Step 5 – Reinsert with stub
         for lang in TARGET_LANGUAGES:
             translated = stub_translate(blocks, lang)
             out_path = os.path.join(OUTPUT_DIR, f"{name}_{lang}.png")

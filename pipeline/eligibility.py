@@ -3,7 +3,6 @@ Step 1 – Confirm content eligibility.
 Checks whether an asset is art-type and suitable for the LLM localization pipeline.
 """
 
-import os
 from pathlib import Path
 from config import SUPPORTED_EXTENSIONS
 
@@ -13,7 +12,7 @@ def check_eligibility(file_path: str) -> dict:
     Returns a dict with:
       - eligible (bool)
       - reason (str)
-      - asset_type (str): 'raster', 'svg', 'pdf', or 'unknown'
+      - asset_type (str): 'raster', 'pdf', or 'unknown'
     """
     path = Path(file_path)
 
@@ -23,7 +22,8 @@ def check_eligibility(file_path: str) -> dict:
     ext = path.suffix.lower()
 
     if ext in SUPPORTED_EXTENSIONS:
-        return {"eligible": True, "reason": f"Supported raster/PDF type: {ext}", "asset_type": "raster" if ext != ".pdf" else "pdf"}
+        asset_type = "pdf" if ext == ".pdf" else "raster"
+        return {"eligible": True, "reason": f"Supported type: {ext}", "asset_type": asset_type}
 
     return {
         "eligible": False,

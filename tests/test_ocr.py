@@ -1,5 +1,6 @@
 """
 Quick OCR test — runs without Azure credentials (uses EasyOCR locally).
+Tests on source-art and MATUA Pass/Fail samples included in the repo.
 
 Run with:
     python -m tests.test_ocr
@@ -7,17 +8,20 @@ Run with:
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
 
 from pipeline.extractor import _extract_via_easyocr, has_localizable_text
+from config import EASYOCR_LANGUAGES
 
-# English-only models — fast to load, good for Latin-script source images
-LANGUAGES = ["en"]
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
 SAMPLES = {
-    "Office (English UI elements)": r"C:\Users\jdobrovodska\source\repos\MATUA 1\MATUA Pass\Office_10599332_PreHandoff_locFile_9fbf326f-4b3d-43aa-823d-8dbac5672e1f.png",
-    "No Loc Art (tab bar)":         r"C:\Users\jdobrovodska\source\repos\No Loc Art\No Loc Art\Xenon_8181674_PreHandoff_locFile_dax-timeline-tab.png",
-    "No Loc Art (gear icon)":       r"C:\Users\jdobrovodska\source\repos\No Loc Art\No Loc Art\Xenon_8141739_PreHandoff_locFile_gear-icon.png",
+    "Source (query preview)":   os.path.join(DATA_DIR, "source-art", "8680235-limited-query-preview.png"),
+    "Source (select everyone)": os.path.join(DATA_DIR, "source-art", "select-everyone.png"),
+    "MATUA Pass (Xenon)":       os.path.join(DATA_DIR, "matua-pass", "Xenon_8157719_PreHandoff_locFile_container-properties.png"),
+    "MATUA Fail (Xenon)":       os.path.join(DATA_DIR, "matua-fail", "Xenon_8157723_PreHandoff_locFile_container-properties.png"),
 }
 
 
@@ -35,7 +39,7 @@ def main():
             continue
 
         try:
-            blocks = _extract_via_easyocr(path, languages=LANGUAGES)
+            blocks = _extract_via_easyocr(path, languages=EASYOCR_LANGUAGES)
             localizable = has_localizable_text(blocks)
             print(f"  Blocks : {len(blocks)}  |  Localizable : {localizable}\n")
             for b in blocks:
