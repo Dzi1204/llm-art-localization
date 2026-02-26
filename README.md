@@ -35,7 +35,7 @@ Source image (en-US)
 
 | Phase | Languages |
 |-------|-----------|
-| Phase 1 – Initial pilot | Slovak (`sk-SK`), Italian (`it-IT`) |
+| Phase 1 – Italian (`it-IT`) |
 | Phase 2 – Expansion | Additional languages with known characteristics (e.g. longer text expansion, different scripts) |
 | Phase 3 – Scale-out | Broad language coverage |
 
