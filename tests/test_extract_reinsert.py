@@ -117,6 +117,7 @@ def main():
             translated = _stub_translate(blocks, TARGET_LANGUAGE)
 
         # Step 4b – QE scoring
+        qe_results = None
         if use_qe:
             try:
                 print(f"\n  Scoring translations via QE (dev)...")
@@ -150,6 +151,7 @@ def main():
             source_language=SOURCE_LANGUAGE,
             target_language=TARGET_LANGUAGE,
             output_dir=PACKAGE_DIR,
+            qe_results=qe_results,
         )
         print(f"  -> Review package  : {os.path.basename(zip_path)}\n")
 
