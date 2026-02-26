@@ -1,14 +1,14 @@
 """
 Step 3 – Extract visible text from art assets.
 
-Backends (auto-selected):
-  - Azure AI Document Intelligence  →  when AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT + KEY are set in .env
-  - EasyOCR (local, no cloud)       →  fallback when Azure creds are missing
+Backends (auto-selected by what is set in .env):
+  - Azure AI Document Intelligence  →  when AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT is set
+      Auth: API key (if AZURE_DOCUMENT_INTELLIGENCE_KEY is set) or DefaultAzureCredential (Managed Identity / az login)
+  - EasyOCR (local, no cloud)       →  when no endpoint is set
 
 Returns a list of TextBlock: { text, bounding_box, page, confidence }
 """
 
-from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -25,8 +25,11 @@ class TextBlock:
 
 
 def extract_text(file_path: str) -> List[TextBlock]:
-    """Routes to the correct extractor based on available credentials."""
-    if AZURE_ENDPOINT and AZURE_KEY:
+    """
+    Routes to Azure if an endpoint is configured, otherwise falls back to EasyOCR.
+    Just set AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT in .env to switch backends.
+    """
+    if AZURE_ENDPOINT:
         print("  [OCR backend: Azure AI Document Intelligence]")
         return _extract_via_azure(file_path)
 
@@ -73,17 +76,23 @@ def _extract_via_easyocr(file_path: str, languages: List[str] = None) -> List[Te
 
 
 # ---------------------------------------------------------------------------
-# Azure AI Document Intelligence (raster images + PDFs)
+# Azure AI Document Intelligence
+# Auth: API key if set, otherwise DefaultAzureCredential (Managed Identity / az login)
 # ---------------------------------------------------------------------------
 
 def _extract_via_azure(file_path: str) -> List[TextBlock]:
     from azure.ai.documentintelligence import DocumentIntelligenceClient
     from azure.core.credentials import AzureKeyCredential
+    from azure.identity import DefaultAzureCredential
 
-    client = DocumentIntelligenceClient(
-        endpoint=AZURE_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_KEY),
-    )
+    if AZURE_KEY:
+        credential = AzureKeyCredential(AZURE_KEY)
+        print("  [Azure auth: API key]")
+    else:
+        credential = DefaultAzureCredential()
+        print("  [Azure auth: Managed Identity / az login]")
+
+    client = DocumentIntelligenceClient(endpoint=AZURE_ENDPOINT, credential=credential)
 
     with open(file_path, "rb") as f:
         poller = client.begin_analyze_document(
@@ -96,16 +105,14 @@ def _extract_via_azure(file_path: str) -> List[TextBlock]:
     blocks: List[TextBlock] = []
 
     for page in result.pages:
-        page_num = page.page_number
         for word in page.words:
             if word.confidence < 0.3:
                 continue
-            polygon = word.polygon or []
             blocks.append(
                 TextBlock(
                     text=word.content,
-                    bounding_box=list(polygon),
-                    page=page_num,
+                    bounding_box=list(word.polygon or []),
+                    page=page.page_number,
                     confidence=word.confidence,
                 )
             )

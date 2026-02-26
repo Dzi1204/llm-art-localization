@@ -31,10 +31,7 @@ TARGET_LANGUAGES = ["it-IT"]
 
 
 def stub_translate(blocks: list, target_lang: str) -> list:
-    """
-    Placeholder — marks each block with the target language prefix.
-    The data scientist will replace this with the real LLM translation prompt.
-    """
+    """Placeholder — marks each block with the target language prefix until translator.py is wired in."""
     prefix = target_lang.split("-")[0].upper()  # "it-IT" → "IT"
     return [
         TextBlock(
