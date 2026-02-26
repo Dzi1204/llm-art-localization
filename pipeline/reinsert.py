@@ -14,11 +14,32 @@ Font size is auto-fitted to the bounding box and text is wrapped to stay within 
 # See translator.py for the existing Azure AI Foundry integration pattern.
 """
 
+import re
 from pathlib import Path
 from typing import List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 from pipeline.extractor import TextBlock
+
+
+# Patterns for strings that are never translatable — skip reinsertion for these
+# so we don't paint over perfectly good original pixels.
+_NON_TRANSLATABLE = re.compile(
+    r"""
+    ^(
+        [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}  # GUID
+        | [\w.+\-]+@[\w.\-]+\.\w+                                                        # email
+        | '?[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}"?                               # IP address
+        | [\d\s.,\-+%:]+                                                                  # numbers / dates
+    )$
+    """,
+    re.VERBOSE,
+)
+
+
+def _is_non_translatable(text: str) -> bool:
+    """Returns True for strings that should never be touched by reinsertion."""
+    return bool(_NON_TRANSLATABLE.match(text.strip()))
 
 
 def reinsert_raster(
@@ -41,10 +62,11 @@ def reinsert_raster(
         if len(bbox) < 4:
             continue
 
-        # Skip untranslated strings — leave original pixels intact.
-        # These are GUIDs, IPs, emails, numbers, product names the LLM correctly
-        # left unchanged. Painting over them would only make the image look worse.
-        if src_block.text.strip() == tgt_block.text.strip():
+        # Skip strings that are structurally non-translatable (GUIDs, IPs, emails,
+        # numbers). Leave original pixels intact — redrawing them looks worse.
+        # We do NOT skip based on source == translated because the LLM can
+        # inconsistently return source text unchanged for repetitive batches.
+        if _is_non_translatable(src_block.text):
             continue
 
         rect = _polygon_to_rect(bbox)
