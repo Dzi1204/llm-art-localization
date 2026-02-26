@@ -17,10 +17,10 @@ Source image (en-US)
   OCR extraction          ← Azure AI Document Intelligence or EasyOCR (local)
        │
        ▼
-  LLM translation         ← Claude (Anthropic) + One Term glossary + RTL support
+  LLM translation         ← Claude (Anthropic) + One Term glossary
        │
        ▼
-  Text reinsertion        ← Pillow (raster) / lxml (SVG)
+  Text reinsertion        ← Pillow
        │
        ▼
   MATUA review ZIP        ← original + localized + text mapping
@@ -31,11 +31,11 @@ Source image (en-US)
 
 ---
 
-## Pilot Languages
+## Pilot Language
 
 | Phase | Languages |
 |-------|-----------|
-| Phase 1 – Italian (`it-IT`) |
+| Phase 1 – Initial pilot | Italian (`it-IT`) |
 | Phase 2 – Expansion | Additional languages with known characteristics (e.g. longer text expansion, different scripts) |
 | Phase 3 – Scale-out | Broad language coverage |
 
@@ -47,7 +47,6 @@ Source image (en-US)
 |------|----------|
 | PNG, JPG, BMP, TIFF | Azure Doc Intelligence or EasyOCR |
 | PDF | Azure Doc Intelligence |
-| SVG | Direct XML parsing — no OCR needed |
 
 ---
 
@@ -59,10 +58,14 @@ LLMage/
 ├── requirements.txt
 ├── config.py                     # all settings in one place
 ├── main.py                       # run the full pipeline on a file or folder
+├── data/
+│   ├── source-art/               # English source images (pilot input)
+│   ├── matua-pass/               # reference: localized images that passed review
+│   └── matua-fail/               # reference: localized images that failed review
 ├── pipeline/
 │   ├── eligibility.py            # Step 1:  file type check
 │   ├── extractor.py              # Step 3:  OCR text extraction + bounding boxes
-│   ├── translator.py             # Step 4:  LLM translation (data scientist scope)
+│   ├── translator.py             # Step 4:  LLM translation
 │   ├── reinsert.py               # Step 5:  text reinsertion into asset
 │   ├── packager.py               # Step 6:  MATUA review ZIP creation
 │   └── metrics.py                # Step 10: pass/fail/escalation logging
@@ -94,18 +97,16 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and fill in what you have. Azure keys are optional — leave blank to use EasyOCR locally.
+Open `.env` and set what you have. The endpoint alone is enough to switch to Azure — no key required if using Managed Identity.
 
 ```env
-# Leave blank to use local EasyOCR (no cloud needed)
-AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=
-AZURE_DOCUMENT_INTELLIGENCE_KEY=
+# Set endpoint to use Azure. Leave blank to use EasyOCR locally.
+AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-resource>.cognitiveservices.azure.com/
+AZURE_DOCUMENT_INTELLIGENCE_KEY=   # optional — leave blank to use az login / Managed Identity
 
-# Required only for translation step
-ANTHROPIC_API_KEY=
+ANTHROPIC_API_KEY=<your-key>
 
-# Target language for pilot
-TARGET_LANGUAGE=sk-SK
+TARGET_LANGUAGE=it-IT
 ```
 
 ---
@@ -115,7 +116,7 @@ TARGET_LANGUAGE=sk-SK
 ### Test extraction + reinsertion (no API keys needed)
 
 Validates that text is correctly extracted and reinserted into the source images.
-Uses a stub translation (`[SK: original text]`) so you can visually verify bounding box positions.
+Uses a stub translation (`[IT: original text]`) so you can visually verify bounding box positions.
 
 ```bash
 python -m tests.test_extract_reinsert
@@ -124,11 +125,10 @@ python -m tests.test_extract_reinsert
 Output images are saved to:
 ```
 output/test_reinsert/
-  select-everyone_sk-SK.png
   select-everyone_it-IT.png
-  view-report-for-compliance-policy_sk-SK.png
   view-report-for-compliance-policy_it-IT.png
-  ...
+  8680235-limited-query-preview_it-IT.png
+  configuration-properties_it-IT.png
 ```
 
 ### Test OCR only
@@ -140,13 +140,13 @@ python -m tests.test_ocr
 ### Run the full pipeline on a single image
 
 ```bash
-python main.py --input "path/to/image.png" --target sk-SK
+python main.py --input "path/to/image.png" --target it-IT
 ```
 
 ### Run on a folder
 
 ```bash
-python main.py --input "C:\path\to\Source Art Matua" --target sk-SK
+python main.py --input "data/source-art" --target it-IT
 ```
 
 Output packages (MATUA review ZIPs) are saved to `output/packages/`.
@@ -157,15 +157,16 @@ Output packages (MATUA review ZIPs) are saved to `output/packages/`.
 
 The pipeline auto-selects the OCR backend based on your `.env`:
 
-| Condition | Backend used |
-|-----------|-------------|
-| Azure keys present in `.env` | Azure AI Document Intelligence (`prebuilt-read`) |
-| No Azure keys | EasyOCR (local, no cloud) |
+| Condition | Backend | Auth |
+|-----------|---------|------|
+| Endpoint set, no key | Azure AI Document Intelligence | Managed Identity / `az login` |
+| Endpoint set, key set | Azure AI Document Intelligence | API key |
+| No endpoint | EasyOCR (local) | None |
 
 To set up Azure AI Document Intelligence:
 1. Go to [portal.azure.com](https://portal.azure.com)
 2. Create resource → search **Document Intelligence**
-3. Copy the endpoint and key into `.env`
+3. Copy the endpoint into `.env` — run `az login` locally, no key needed
 
 ---
 
