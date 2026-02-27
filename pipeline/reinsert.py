@@ -208,3 +208,21 @@ def _load_font(size: int = 14) -> ImageFont.FreeTypeFont:
         except Exception:
             continue
     return ImageFont.load_default()
+
+
+def reinsert_svg(
+    original_path: str,
+    source_blocks: List[TextBlock],
+    translated_blocks: List[TextBlock],
+    output_path: str,
+) -> str:
+    """Placeholder for SVG reinsertion (not yet implemented).
+
+    For now, copies the original SVG unchanged and logs a warning.
+    """
+    import shutil
+
+    print("  WARNING: SVG reinsertion is not yet implemented — copying original unchanged.")
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(original_path, output_path)
+    return output_path

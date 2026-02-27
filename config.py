@@ -7,25 +7,14 @@ load_dotenv()
 # Auth priority:
 #   1. Managed Identity / DefaultAzureCredential (recommended — run 'az login' locally)
 #   2. API key fallback — only if AZURE_DOCUMENT_INTELLIGENCE_KEY is set in .env
-def _real_endpoint(value: str | None) -> str | None:
-    """Returns None if the value is blank or still the placeholder from .env.example."""
-    if not value:
-        return None
-    if "<" in value or "your-" in value:
-        return None
-    return value
-
-AZURE_ENDPOINT = _real_endpoint(os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"))
+AZURE_ENDPOINT = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
 AZURE_KEY = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")  # leave blank to use DefaultAzureCredential
-# Azure AI Foundry — used for LLM translation (preferred, enterprise auth)
-# Auth: DefaultAzureCredential (Managed Identity / az login) — no API keys required
-AZURE_FOUNDRY_ENDPOINT = _real_endpoint(os.getenv("AZURE_FOUNDRY_ENDPOINT"))
-AZURE_FOUNDRY_MODEL = os.getenv("AZURE_FOUNDRY_MODEL", "claude-sonnet-4-6")
-
-# OpenAI — dev fallback when Foundry is not available
-# Set OPENAI_API_KEY in .env to enable. Foundry takes priority if both are set.
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+# Azure OpenAI — used for LLM translation
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
+AZURE_OPENAI_MODEL = os.getenv("AZURE_OPENAI_MODEL", "gpt-4.1")
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
 TARGET_LANGUAGE = os.getenv("TARGET_LANGUAGE", "it-IT")
 
 # Source is always English — confirmed in iCMS Cedar (SourceFileIngestedEvent, en-US hardcoded)
