@@ -14,16 +14,19 @@ Microsoft's existing art localization flow (MATUA) relies on classic MT for tran
 Source image (en-US)
        |
        v
-  OCR extraction          <- Azure AI Document Intelligence or EasyOCR (local)
+  Eligibility check       <- file type + extension filter
        |
        v
+  OCR extraction          <- Azure AI Document Intelligence or EasyOCR (local)
+       |
+       v                  <- NoLoc: no text found → copy to output/no-loc/
   LLM translation         <- Azure AI Foundry (preferred) or OpenAI (dev fallback)
        |
        v
   QE scoring              <- LLMQualityEstimation service (dev)
        |
        v
-  Text reinsertion        <- Pillow (auto-fit font, skip non-translatable regions)
+  Text reinsertion        <- Pillow (auto-fit font, skip non-translatable strings)
        |
        v
   MATUA review ZIP        <- original + localized + text mapping + QE scores
@@ -64,8 +67,14 @@ LLMArtLocalization/
 +-- main.py                       # CLI — run the full pipeline on a file or folder
 +-- data/
 |   +-- source-art/               # English source images (pilot input)
+|   +-- no-loc/                   # reference: known NoLoc images (no text to localize)
 |   +-- matua-pass/               # reference: localized images that passed review
 |   +-- matua-fail/               # reference: localized images that failed review
++-- output/                       # pipeline results (generated at runtime)
+|   +-- localized/                # localized images (main.py)
+|   +-- no-loc/                   # images detected as NoLoc during pipeline run
+|   +-- test_reinsert/            # localized images (test runner)
+|   +-- packages/                 # MATUA review ZIPs
 +-- pipeline/
 |   +-- eligibility.py            # Step 1:  file type check
 |   +-- extractor.py              # Step 3:  OCR text extraction + bounding boxes
@@ -75,7 +84,7 @@ LLMArtLocalization/
 |   +-- packager.py               # Step 6:  MATUA review ZIP creation
 |   +-- metrics.py                # Step 10: pass/fail/escalation logging
 +-- tests/
-    +-- test_ocr.py               # OCR only -- validate extraction on samples
+    +-- test_ocr.py               # OCR only — validate extraction on samples
     +-- test_extract_reinsert.py  # Extract + translate + QE + reinsert end-to-end
 ```
 
@@ -87,6 +96,7 @@ LLMArtLocalization/
 
 - Python 3.10+
 - pip
+- Windows (font rendering uses system fonts from `C:/Windows/Fonts/`)
 
 ### 2. Install dependencies
 
@@ -98,14 +108,8 @@ pip install -r requirements.txt
 
 ### 3. Configure environment
 
-**Windows:**
 ```cmd
 copy .env.example .env
-```
-
-**Mac / Linux:**
-```bash
-cp .env.example .env
 ```
 
 Edit `.env` with your values — see sections below for each service.
@@ -122,22 +126,24 @@ streamlit run app.py
 
 Opens in your browser automatically. Features:
 
-- **Language selector** — all 16 QE-supported languages shown; only Phase 1 languages are active (currently Italian). Phase 2+ languages are visible but locked.
-- **Upload** any PNG / JPG source image
+- **Multi-image upload** — select one or more PNG / JPG source images at once
+- **Language selector** — multiselect showing only currently enabled languages (Italian for Phase 1); more languages added to the selector as each phase activates
 - **Sidebar** shows which backends are active (Foundry / OpenAI / QE) with status indicators
-- **Side-by-side view** — original vs localized image
-- **Translations table** — every string with EN source, translated text, QE score and flag status
+- **Scrollable comparison strip** — original and all localizations shown side by side; scroll horizontally to compare when multiple languages are selected
+- **Language switcher** — click a language button below the strip to see its QE score, translations table, and downloads — updates live without re-running
+- **NoLoc handling** — images with no localizable text are skipped and saved to `output/no-loc/`
+- **Per-image expanders** — when multiple images are uploaded, each gets its own comparison section
 - **QE banner** — red warning if strings were flagged by QE, green if all passed
-- **Download buttons** — localized image and MATUA review ZIP
+- **Download buttons** — localized image and MATUA review ZIP per language
 
-Supported target languages:
+Active languages (UI selector):
 
-| Language | Code | Enabled |
-|----------|------|-------|
-| Italian | `it-IT` | True |
-| German, Spanish, French, Portuguese (BR) | `de-DE`, `es-ES`, `fr-FR`, `pt-BR` | False |
-| Japanese, Korean, Chinese (CN/TW) | `ja-JP`, `ko-KR`, `zh-CN`, `zh-TW` | False |
-| Slovak, Czech, Polish, Romanian, Dutch, Danish, Latvian | | False |
+| Language | Code | Status |
+|----------|------|--------|
+| Italian | `it-IT` | Active |
+| German, Spanish, French, Portuguese (BR) | `de-DE`, `es-ES`, `fr-FR`, `pt-BR` | Planned |
+| Japanese, Korean, Chinese (CN/TW) | `ja-JP`, `ko-KR`, `zh-CN`, `zh-TW` | Planned |
+| Slovak, Czech, Polish, Romanian, Dutch, Danish, Latvian | `sk-SK`, `cs-CZ`, `pl-PL`, `ro-RO`, `nl-NL`, `da-DK`, `lv-LV` | Planned |
 
 ---
 
@@ -199,10 +205,12 @@ output/
 |   +-- 8680235-limited-query-preview_it-IT.png
 |   +-- configuration-properties_it-IT.png
 +-- packages/
-    +-- select-everyone_it-IT.zip
-    +-- view-report-for-compliance-policy_it-IT.zip
-    +-- 8680235-limited-query-preview_it-IT.zip
-    +-- configuration-properties_it-IT.zip
+|   +-- select-everyone_it-IT.zip
+|   +-- view-report-for-compliance-policy_it-IT.zip
+|   +-- 8680235-limited-query-preview_it-IT.zip
+|   +-- configuration-properties_it-IT.zip
++-- no-loc/
+    +-- <images with no localizable text>
 ```
 
 ### OCR only
@@ -217,11 +225,15 @@ python -m tests.test_ocr
 python main.py --input "path/to/image.png" --target it-IT
 ```
 
+Output: `output/localized/<image>_it-IT.png` + `output/packages/<image>_it-IT.zip`
+
 ### Full pipeline on a folder
 
 ```bash
 python main.py --input "data/source-art" --target it-IT
 ```
+
+NoLoc images are automatically copied to `output/no-loc/`.
 
 ---
 
@@ -287,7 +299,7 @@ OPENAI_MODEL=gpt-4o        # or gpt-4o-mini for lower cost
 ## QE Scoring
 
 After translation, each string is scored by the **LLMQualityEstimation** service (dev).
-Strings scoring below `QE_SCORE_THRESHOLD` are flagged in the console report and in the review package.
+Strings scoring below `QE_SCORE_THRESHOLD` (default: `0.7`) are flagged in the report and in the review package.
 
 ```env
 QE_ENDPOINT=https://llm-quality-estimation-dev.azurewebsites.net/
@@ -304,6 +316,8 @@ az account get-access-token --resource api://0da43d3e-94e5-42fe-a9f4-09600ef7347
 Copy the `accessToken` value into `.env` as `QE_BEARER_TOKEN`.
 
 QE scoring is skipped silently if `QE_ENDPOINT` or `QE_BEARER_TOKEN` is not set.
+
+Non-translatable strings (GUIDs, IP addresses, numbers, emails) are automatically excluded from QE scoring — the service receives only meaningful text strings.
 
 ---
 
