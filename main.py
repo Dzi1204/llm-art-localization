@@ -8,7 +8,10 @@ Usage:
 
 import argparse
 import os
+import shutil
 from pathlib import Path
+
+NO_LOC_DIR = Path(__file__).parent / "output" / "no-loc"
 
 from pipeline.eligibility import check_eligibility
 from pipeline.extractor import extract_text, has_localizable_text
@@ -17,6 +20,15 @@ from pipeline.reinsert import reinsert_raster, reinsert_svg
 from pipeline.packager import create_review_package
 from pipeline.metrics import log_result
 from config import TARGET_LANGUAGE
+
+
+def _save_noloc(file_path: str) -> None:
+    """Copy a NoLoc asset into data/no-loc/ for reference."""
+    NO_LOC_DIR.mkdir(parents=True, exist_ok=True)
+    dest = NO_LOC_DIR / Path(file_path).name
+    if not dest.exists():
+        shutil.copy2(file_path, dest)
+        print(f"  Saved to no-loc: {dest}")
 
 
 def process_asset(
@@ -33,6 +45,7 @@ def process_asset(
     eligibility = check_eligibility(file_path)
     if not eligibility["eligible"]:
         print(f"  SKIP – {eligibility['reason']}")
+        _save_noloc(file_path)
         log_result(asset_id, source_language, target_language, 0, "noloc", eligibility["reason"])
         return {"asset_id": asset_id, "status": "noloc"}
 
@@ -43,6 +56,7 @@ def process_asset(
 
     if not has_localizable_text(blocks):
         print(f"  SKIP – insufficient text for localization (NoLoc)")
+        _save_noloc(file_path)
         log_result(asset_id, source_language, target_language, len(blocks), "noloc", "insufficient text")
         return {"asset_id": asset_id, "status": "noloc", "word_count": len(blocks)}
 

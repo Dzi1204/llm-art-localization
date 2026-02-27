@@ -1,4 +1,4 @@
-# LLMage
+# LLMArtLocalization
 
 LLM-based art localization pipeline. Extracts visible text from UI screenshots and images, translates it using an LLM, scores translation quality via QE, and reinserts the translated text back into the original asset — ready for MATUA / AT Art Review.
 
@@ -8,7 +8,7 @@ Built to operate fully outside of iCMS. No iCMS integration, no auto-publishing.
 
 ## Purpose
 
-Microsoft's existing art localization flow (MATUA) relies on classic MT for translation. LLMage replaces that MT step with an LLM while keeping the rest of the MATUA review process unchanged.
+Microsoft's existing art localization flow (MATUA) relies on classic MT for translation. LLM - Art Localization replaces that MT step with an LLM while keeping the rest of the MATUA review process unchanged.
 
 ```
 Source image (en-US)
@@ -23,10 +23,10 @@ Source image (en-US)
   QE scoring              <- LLMQualityEstimation service (dev)
        |
        v
-  Text reinsertion        <- Pillow
+  Text reinsertion        <- Pillow (auto-fit font, skip non-translatable regions)
        |
        v
-  MATUA review ZIP        <- original + localized + text mapping
+  MATUA review ZIP        <- original + localized + text mapping + QE scores
        |
        v
   Supplier review         <- Pass -> done / Fail -> escalate or NoLoc fallback
@@ -49,18 +49,19 @@ Source image (en-US)
 | Type | Handling |
 |------|----------|
 | PNG, JPG, BMP, TIFF | Azure Doc Intelligence or EasyOCR |
-| PDF | Azure Doc Intelligence |
+| PDF | Azure Doc Intelligence (OCR only — reinsertion not yet supported) |
 
 ---
 
 ## Project Structure
 
 ```
-LLMage/
+LLMArtLocalization/
 +-- .env.example                  # copy to .env and fill in your values
 +-- requirements.txt
 +-- config.py                     # all settings in one place
-+-- main.py                       # run the full pipeline on a file or folder
++-- app.py                        # Streamlit UI — run with: streamlit run app.py
++-- main.py                       # CLI — run the full pipeline on a file or folder
 +-- data/
 |   +-- source-art/               # English source images (pilot input)
 |   +-- matua-pass/               # reference: localized images that passed review
@@ -108,6 +109,119 @@ cp .env.example .env
 ```
 
 Edit `.env` with your values — see sections below for each service.
+
+---
+
+## UI — Streamlit App
+
+The easiest way to run the pipeline is via the Streamlit UI:
+
+```bash
+streamlit run app.py
+```
+
+Opens in your browser automatically. Features:
+
+- **Language selector** — all 16 QE-supported languages shown; only Phase 1 languages are active (currently Italian). Phase 2+ languages are visible but locked.
+- **Upload** any PNG / JPG source image
+- **Sidebar** shows which backends are active (Foundry / OpenAI / QE) with status indicators
+- **Side-by-side view** — original vs localized image
+- **Translations table** — every string with EN source, translated text, QE score and flag status
+- **QE banner** — red warning if strings were flagged by QE, green if all passed
+- **Download buttons** — localized image and MATUA review ZIP
+
+Supported target languages:
+
+| Language | Code | Enabled |
+|----------|------|-------|
+| Italian | `it-IT` | True |
+| German, Spanish, French, Portuguese (BR) | `de-DE`, `es-ES`, `fr-FR`, `pt-BR` | False |
+| Japanese, Korean, Chinese (CN/TW) | `ja-JP`, `ko-KR`, `zh-CN`, `zh-TW` | False |
+| Slovak, Czech, Polish, Romanian, Dutch, Danish, Latvian | | False |
+
+---
+
+## CLI
+
+### End-to-end test (extract + translate + QE + reinsert)
+
+```bash
+python -m tests.test_extract_reinsert
+```
+
+Sample output:
+
+```
+Source      : en-US
+Target      : it-IT
+Translator  : OpenAI
+QE scoring  : enabled (dev)
+
+============================================================
+  select-everyone.png
+============================================================
+  Blocks extracted : 16  |  Localizable : True
+
+  Translating via OpenAI (it-IT)...
+
+  Scoring translations via QE (dev)...
+
+  QE Results -- 16 strings scored
+  Threshold : 0.7
+  OK        : 15
+  Flagged   : 1
+
+  [0.88]
+    EN: 'Select User; Computer; Service Account; or'
+    IT: 'Seleziona Utente; Computer; Account di Servizio; o'
+  [1.00]
+    EN: 'Select this object type:'
+    IT: 'Seleziona questo tipo di oggetto:'
+  [0.55]  FLAG
+    EN: 'or Built-in security principal'
+    IT: 'o Principale di sicurezza integrato'
+  [N/A]
+    EN: 'OK'
+    IT: 'OK'
+
+  -> Localized image : select-everyone_it-IT.png
+  -> Review package  : select-everyone_it-IT.zip
+```
+
+> `[N/A]` = non-translatable string (GUIDs, IPs, numbers) — QE service skips these, reinsertion leaves original pixels intact.
+
+Output files:
+```
+output/
++-- test_reinsert/
+|   +-- select-everyone_it-IT.png
+|   +-- view-report-for-compliance-policy_it-IT.png
+|   +-- 8680235-limited-query-preview_it-IT.png
+|   +-- configuration-properties_it-IT.png
++-- packages/
+    +-- select-everyone_it-IT.zip
+    +-- view-report-for-compliance-policy_it-IT.zip
+    +-- 8680235-limited-query-preview_it-IT.zip
+    +-- configuration-properties_it-IT.zip
+```
+
+### OCR only
+
+```bash
+python -m tests.test_ocr
+```
+
+### Full pipeline on a single image
+
+```bash
+python main.py --input "path/to/image.png" --target it-IT
+```
+
+### Full pipeline on a folder
+
+```bash
+python main.py --input "data/source-art" --target it-IT
+```
 
 ---
 
@@ -173,9 +287,7 @@ OPENAI_MODEL=gpt-4o        # or gpt-4o-mini for lower cost
 ## QE Scoring
 
 After translation, each string is scored by the **LLMQualityEstimation** service (dev).
-Strings scoring below `QE_SCORE_THRESHOLD` are flagged in the console report.
-
-Auth uses a manually obtained Bearer token.
+Strings scoring below `QE_SCORE_THRESHOLD` are flagged in the console report and in the review package.
 
 ```env
 QE_ENDPOINT=https://llm-quality-estimation-dev.azurewebsites.net/
@@ -193,95 +305,6 @@ Copy the `accessToken` value into `.env` as `QE_BEARER_TOKEN`.
 
 QE scoring is skipped silently if `QE_ENDPOINT` or `QE_BEARER_TOKEN` is not set.
 
-**About `[N/A]` scores:** Strings where source equals translated (GUIDs, IP addresses, product names, numbers) are filtered out by the QE service as non-translatable and return no score. This is expected.
-
----
-
-## Running
-
-### End-to-end test (extract + translate + QE + reinsert)
-
-```bash
-python -m tests.test_extract_reinsert
-```
-
-Sample output:
-
-```
-Source      : en-US
-Target      : it-IT
-Translator  : OpenAI
-QE scoring  : enabled (dev)
-
-============================================================
-  select-everyone.png
-============================================================
-  Blocks extracted : 16  |  Localizable : True
-
-  Translating via OpenAI (it-IT)...
-
-  Scoring translations via QE (dev)...
-
-  QE Results -- 16 strings scored
-  Threshold : 0.7
-  OK        : 15
-  Flagged   : 1
-
-  [0.88]
-    EN: 'Select User; Computer; Service Account; or'
-    IT: 'Seleziona Utente; Computer; Account di Servizio; o'
-  [1.00]
-    EN: 'Select this object type:'
-    IT: 'Seleziona questo tipo di oggetto:'
-  [0.55]  FLAG
-    EN: 'or Built-in security principal'
-    IT: 'o Principale di sicurezza integrato'
-  [0.95]
-    EN: 'Check Names'
-    IT: 'Verifica Nomi'
-  [N/A]
-    EN: 'OK'
-    IT: 'OK'
-
-  -> Localized image : select-everyone_it-IT.png
-  -> Review package  : select-everyone_it-IT.zip
-```
-
-> `[N/A]` = source and translated text are identical (e.g. "OK", GUIDs, IPs) — QE service skips these as non-translatable.
-
-Output files:
-```
-output/
-+-- test_reinsert/
-|   +-- select-everyone_it-IT.png
-|   +-- view-report-for-compliance-policy_it-IT.png
-|   +-- 8680235-limited-query-preview_it-IT.png
-|   +-- configuration-properties_it-IT.png
-+-- packages/
-    +-- select-everyone_it-IT.zip
-    +-- view-report-for-compliance-policy_it-IT.zip
-    +-- 8680235-limited-query-preview_it-IT.zip
-    +-- configuration-properties_it-IT.zip
-```
-
-### OCR only
-
-```bash
-python -m tests.test_ocr
-```
-
-### Full pipeline on a single image
-
-```bash
-python main.py --input "path/to/image.png" --target it-IT
-```
-
-### Full pipeline on a folder
-
-```bash
-python main.py --input "data/source-art" --target it-IT
-```
-
 ---
 
 ## MATUA Review Package
@@ -292,8 +315,30 @@ Each processed asset produces a ZIP following the MATUA / AT Art Review structur
 <asset_id>/
   original.<ext>          source image
   localized.<ext>         LLM-localized image
-  text_mapping.json       source <-> translated string pairs with QE scores
-  metadata.json           language info, model used, string count
+  text_mapping.json       source <-> translated string pairs with QE scores and flagged status
+  metadata.json           language info, model, string count, QE summary + flagged strings list
+```
+
+Example `metadata.json`:
+```json
+{
+  "asset_id": "select-everyone",
+  "source_language": "en-US",
+  "target_language": "it-IT",
+  "total_strings": 16,
+  "qe": {
+    "scored": 13,
+    "flagged": 1,
+    "not_scored": 3,
+    "flagged_strings": [
+      {
+        "source": "or Built-in security principal",
+        "translated": "o Principale di sicurezza integrato",
+        "qe_score": 0.55
+      }
+    ]
+  }
+}
 ```
 
 ---
@@ -304,3 +349,4 @@ Each processed asset produces a ZIP following the MATUA / AT Art Review structur
 - Auto-publishing
 - Non-art content types (text files, XLIFF, etc.)
 - LLM involvement in review decisions (LLM is translation only)
+- PDF reinsertion (OCR extraction works, reinsertion not yet implemented)

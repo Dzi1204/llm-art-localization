@@ -97,7 +97,7 @@ def _extract_via_azure(file_path: str) -> List[TextBlock]:
     with open(file_path, "rb") as f:
         poller = client.begin_analyze_document(
             "prebuilt-read",
-            analyze_request=f,
+            body=f,
             content_type="application/octet-stream",
         )
 

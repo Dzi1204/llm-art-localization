@@ -12,6 +12,7 @@ Run with:
 
 import sys
 import os
+import shutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from pipeline.extractor import _extract_via_easyocr, has_localizable_text, TextBlock
@@ -25,6 +26,7 @@ from config import (
 SOURCE_DIR  = os.path.join(os.path.dirname(__file__), "..", "data", "source-art")
 OUTPUT_DIR  = os.path.join(os.path.dirname(__file__), "..", "output", "test_reinsert")
 PACKAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "output", "packages")
+NOLOC_DIR   = os.path.join(os.path.dirname(__file__), "..", "output", "no-loc")
 
 SOURCE_FILES = [
     "select-everyone.png",
@@ -50,6 +52,7 @@ def _stub_translate(blocks: list, target_lang: str) -> list:
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(NOLOC_DIR, exist_ok=True)
 
     if AZURE_FOUNDRY_ENDPOINT:
         translator_label = "Azure AI Foundry"
@@ -106,7 +109,10 @@ def main():
             print(f"    [{b.confidence:.2f}] {b.text!r}")
 
         if not localizable:
-            print("  -> Skipped (NoLoc)\n")
+            dest = os.path.join(NOLOC_DIR, filename)
+            if not os.path.exists(dest):
+                shutil.copy2(path, dest)
+            print(f"  -> Skipped (NoLoc) — saved to output/no-loc/{filename}\n")
             continue
 
         # Step 4 – Translate

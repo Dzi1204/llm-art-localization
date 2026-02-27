@@ -7,11 +7,19 @@ load_dotenv()
 # Auth priority:
 #   1. Managed Identity / DefaultAzureCredential (recommended — run 'az login' locally)
 #   2. API key fallback — only if AZURE_DOCUMENT_INTELLIGENCE_KEY is set in .env
-AZURE_ENDPOINT = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
+def _real_endpoint(value: str | None) -> str | None:
+    """Returns None if the value is blank or still the placeholder from .env.example."""
+    if not value:
+        return None
+    if "<" in value or "your-" in value:
+        return None
+    return value
+
+AZURE_ENDPOINT = _real_endpoint(os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"))
 AZURE_KEY = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")  # leave blank to use DefaultAzureCredential
 # Azure AI Foundry — used for LLM translation (preferred, enterprise auth)
 # Auth: DefaultAzureCredential (Managed Identity / az login) — no API keys required
-AZURE_FOUNDRY_ENDPOINT = os.getenv("AZURE_FOUNDRY_ENDPOINT")
+AZURE_FOUNDRY_ENDPOINT = _real_endpoint(os.getenv("AZURE_FOUNDRY_ENDPOINT"))
 AZURE_FOUNDRY_MODEL = os.getenv("AZURE_FOUNDRY_MODEL", "claude-sonnet-4-6")
 
 # OpenAI — dev fallback when Foundry is not available

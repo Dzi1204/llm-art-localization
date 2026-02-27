@@ -1,3 +1,4 @@
+streamlit>=1.35.0
 azure-ai-documentintelligence==1.0.0
 azure-ai-inference==1.0.0b9
 azure-identity==1.19.0
