@@ -1,6 +1,32 @@
-__pycache__/
-*.pyc
-.vs/
-output/
+# Secrets
 .env
-*.zip
+
+# Data images — folder structure tracked via .gitkeep, image contents not pushed
+data/source-art/*
+data/matua-pass/*
+data/matua-fail/*
+data/no-loc/*
+data/prod-it-fail/*
+!data/**/.gitkeep
+
+# Pipeline output (generated at runtime)
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# EasyOCR model cache
+.EasyOCR/
+
+# Visual Studio
+.vs/
+
+# IDE / OS
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db
