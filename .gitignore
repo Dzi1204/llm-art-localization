@@ -1,13 +1,8 @@
 # Secrets
 .env
 
-# Data images — folder structure tracked via .gitkeep, image contents not pushed
-data/source-art/*
-data/matua-pass/*
-data/matua-fail/*
-data/no-loc/*
-data/prod-it-fail/*
-!data/**/.gitkeep
+# Data — shared separately (zip), not in repo
+data/
 
 # Pipeline output (generated at runtime)
 output/
