@@ -1,5 +1,6 @@
 """
-Step 4 – Translate extracted text using an LLM (Azure OpenAI).
+Step 4 – Translate extracted text using Azure OpenAI.
+Auth: DefaultAzureCredential (az login / Managed Identity) — no key required.
 """
 
 from typing import List, Dict, Optional
@@ -7,8 +8,6 @@ from typing import List, Dict, Optional
 from config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_DEPLOYMENT,
-    AZURE_OPENAI_MODEL,
-    AZURE_OPENAI_KEY,
     AZURE_OPENAI_API_VERSION,
 )
 from pipeline.extractor import TextBlock
@@ -19,6 +18,7 @@ def translate_blocks(
     source_language: str,
     target_language: str,
     glossary: Optional[Dict[str, str]] = None,
+    model: Optional[str] = None,
 ) -> List[TextBlock]:
     """
     Translates all TextBlocks via the configured LLM backend.
@@ -29,7 +29,7 @@ def translate_blocks(
 
     texts = [b.text for b in blocks]
     prompt = _build_prompt(texts, source_language, target_language, glossary)
-    response_text = _translate_via_azure_openai(prompt)
+    response_text = _translate_via_azure_openai(prompt, model=model or AZURE_OPENAI_DEPLOYMENT)
 
     translated_texts = _parse_response(response_text, len(texts))
 
@@ -45,16 +45,21 @@ def translate_blocks(
     ]
 
 
-def _translate_via_azure_openai(prompt: str) -> str:
+def _translate_via_azure_openai(prompt: str, model: str = AZURE_OPENAI_DEPLOYMENT) -> str:
     from openai import AzureOpenAI
+    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
+    token_provider = get_bearer_token_provider(
+        DefaultAzureCredential(),
+        "https://cognitiveservices.azure.com/.default",
+    )
     client = AzureOpenAI(
         api_version=AZURE_OPENAI_API_VERSION,
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=AZURE_OPENAI_KEY,
+        azure_ad_token_provider=token_provider,
     )
     response = client.chat.completions.create(
-        model=AZURE_OPENAI_DEPLOYMENT,
+        model=model,
         messages=[
             {"role": "system", "content": "You are a professional software UI localization translator."},
             {"role": "user", "content": prompt},

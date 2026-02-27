@@ -19,7 +19,7 @@ from pipeline.translator import translate_blocks
 from pipeline.reinsert import reinsert_raster, reinsert_svg
 from pipeline.packager import create_review_package
 from pipeline.metrics import log_result
-from config import TARGET_LANGUAGE
+from config import TARGET_LANGUAGES
 
 
 def _save_noloc(file_path: str) -> None:
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM-MATUA Art Localization Pipeline")
     parser.add_argument("--input", required=True, help="Image file or folder path")
     parser.add_argument("--source", default="en-US", help="Source language code")
-    parser.add_argument("--target", default=TARGET_LANGUAGE, help="Target language code")
+    parser.add_argument("--target", nargs="+", default=TARGET_LANGUAGES, help="Target language code(s), e.g. it-IT de-DE")
     parser.add_argument("--output", default="output", help="Output directory")
     args = parser.parse_args()
 

@@ -10,12 +10,11 @@ load_dotenv()
 AZURE_ENDPOINT = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
 AZURE_KEY = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")  # leave blank to use DefaultAzureCredential
 # Azure OpenAI — used for LLM translation
+# Auth: DefaultAzureCredential (az login / Managed Identity) — no key required
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
-AZURE_OPENAI_MODEL = os.getenv("AZURE_OPENAI_MODEL", "gpt-4.1")
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
-TARGET_LANGUAGE = os.getenv("TARGET_LANGUAGE", "it-IT")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-global")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
+TARGET_LANGUAGES = [l.strip() for l in os.getenv("TARGET_LANGUAGES", "it-IT").split(",") if l.strip()]
 
 # Source is always English — confirmed in iCMS Cedar (SourceFileIngestedEvent, en-US hardcoded)
 SOURCE_LANGUAGE = "en-US"

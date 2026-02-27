@@ -12,7 +12,7 @@ import streamlit as st
 
 NO_LOC_DIR = Path(__file__).parent / "output" / "no-loc"
 
-from config import SOURCE_LANGUAGE, AZURE_FOUNDRY_ENDPOINT, OPENAI_API_KEY, QE_ENDPOINT, QE_BEARER_TOKEN
+from config import SOURCE_LANGUAGE, AZURE_OPENAI_ENDPOINT, QE_ENDPOINT, QE_BEARER_TOKEN
 from pipeline.extractor import extract_text, has_localizable_text
 from pipeline.reinsert import reinsert_raster
 from pipeline.packager import create_review_package
@@ -68,12 +68,10 @@ st.caption(f"Source: **{SOURCE_LANGUAGE}** → Target: **{', '.join(active_selec
 with st.sidebar:
     st.header("Pipeline Status")
 
-    if AZURE_FOUNDRY_ENDPOINT:
-        st.success("🔵 Translator: Azure AI Foundry")
-    elif OPENAI_API_KEY:
-        st.success("🟢 Translator: OpenAI")
+    if AZURE_OPENAI_ENDPOINT:
+        st.success("🟢 Translator: Azure OpenAI")
     else:
-        st.warning("🟡 Translator: Stub (set AZURE_FOUNDRY_ENDPOINT or OPENAI_API_KEY)")
+        st.warning("🟡 Translator: Stub (set AZURE_OPENAI_ENDPOINT in .env)")
 
     if QE_ENDPOINT and QE_BEARER_TOKEN:
         st.success("🟢 QE Scoring: Enabled")
@@ -147,7 +145,7 @@ if st.button("▶ Run Localization", type="primary", use_container_width=True):
                 with st.status(f"{uf.name} → {selected_lang}", expanded=False):
 
                     # Translate
-                    if AZURE_FOUNDRY_ENDPOINT or OPENAI_API_KEY:
+                    if AZURE_OPENAI_ENDPOINT:
                         from pipeline.translator import translate_blocks
                         st.write(f"Translating → {selected_lang}")
                         translated = translate_blocks(blocks, SOURCE_LANGUAGE, selected_lang)
