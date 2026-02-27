@@ -139,7 +139,7 @@ if st.button("▶ Run Localization", type="primary", use_container_width=True):
                     dest = NO_LOC_DIR / uf.name
                     if not dest.exists():
                         shutil.copy2(input_path, dest)
-                    st.warning(f"{uf.name}: No localizable text found (NoLoc) — saved to `data/no-loc/` and skipped.")
+                    st.warning(f"{uf.name}: No localizable text found (NoLoc) — saved to `output/no-loc/` and skipped.")
                     continue
 
             # Step 2-5 — Per language
