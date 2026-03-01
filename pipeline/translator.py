@@ -8,7 +8,6 @@ from config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_DEPLOYMENT,
     AZURE_OPENAI_MODEL,
-    AZURE_OPENAI_KEY,
     AZURE_OPENAI_API_VERSION,
 )
 from pipeline.extractor import TextBlock
@@ -47,12 +46,18 @@ def translate_blocks(
 
 def _translate_via_azure_openai(prompt: str) -> str:
     from openai import AzureOpenAI
+    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
+    token_provider = get_bearer_token_provider(
+        DefaultAzureCredential(),
+        "https://cognitiveservices.azure.com/.default",
+    )
     client = AzureOpenAI(
         api_version=AZURE_OPENAI_API_VERSION,
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=AZURE_OPENAI_KEY,
+        azure_ad_token_provider=token_provider,
     )
+
     response = client.chat.completions.create(
         model=AZURE_OPENAI_DEPLOYMENT,
         messages=[
