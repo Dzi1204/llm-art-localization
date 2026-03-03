@@ -17,9 +17,10 @@ from pipeline.eligibility import check_eligibility
 from pipeline.extractor import extract_text, has_localizable_text
 from pipeline.translator import translate_blocks
 from pipeline.reinsert import reinsert_raster, reinsert_svg
+from pipeline.layout_refiner import refine_translations
 from pipeline.packager import create_review_package
 from pipeline.metrics import log_result
-from config import TARGET_LANGUAGE
+from config import TARGET_LANGUAGE, AZURE_ENDPOINT
 
 
 def _save_noloc(file_path: str) -> None:
@@ -64,6 +65,10 @@ def process_asset(
     print(f"  Translating {len(blocks)} strings ({source_language} → {target_language})...")
     translated = translate_blocks(blocks, source_language, target_language, glossary)
 
+    # Step 4b – Layout refinement (LLM layout advisor)
+    print(f"  Refining layout...")
+    translated, layout_hints = refine_translations(blocks, translated, target_language)
+
     # Step 5 – Reinsert
     print(f"  Reinserting translated text...")
     localized_dir = Path(output_dir) / "localized"
@@ -74,7 +79,7 @@ def process_asset(
     if asset_type == "svg":
         reinsert_svg(file_path, blocks, translated, localized_path.replace(".png", ".svg"))
     else:
-        reinsert_raster(file_path, blocks, translated, localized_path)
+        reinsert_raster(file_path, blocks, translated, localized_path, layout_hints=layout_hints)
 
     # Step 6 – Package for MATUA review
     print(f"  Creating review package...")
@@ -113,7 +118,9 @@ def run(input_path: str, source_language: str, target_language: str, output_dir:
         print(f"ERROR: {input_path} not found")
         return
 
+    ocr_label = "Azure AI Document Intelligence" if AZURE_ENDPOINT else "EasyOCR (local)"
     print(f"Processing {len(files)} asset(s) → {target_language}")
+    print(f"OCR engine  : {ocr_label}")
     results = []
     for f in files:
         result = process_asset(str(f), source_language, target_language, output_dir)

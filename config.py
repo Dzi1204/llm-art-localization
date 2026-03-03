@@ -16,12 +16,12 @@ AZURE_OPENAI_MODEL = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")       # API key auth
 AZURE_OPENAI_TOKEN = os.getenv("AZURE_OPENAI_TOKEN")   # AD bearer token (secret)
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
-TARGET_LANGUAGE = os.getenv("TARGET_LANGUAGE", "it-IT")
+TARGET_LANGUAGES = [l.strip() for l in os.getenv("TARGET_LANGUAGES", "it-IT").split(",")]
 
 # Source is always English — confirmed in iCMS Cedar (SourceFileIngestedEvent, en-US hardcoded)
 SOURCE_LANGUAGE = "en-US"
 
-SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".pdf"}
+SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".pdf", ".svg"}
 
 # EasyOCR source language — always English since source is en-US
 EASYOCR_LANGUAGES = ["en"]
@@ -29,7 +29,7 @@ EASYOCR_LANGUAGES = ["en"]
 # QE Service (dev) — quality scoring after translation
 # Auth: paste a manually obtained Bearer token into .env
 QE_ENDPOINT = os.getenv("QE_ENDPOINT")          # e.g. https://<func>.azurewebsites.net
-QE_BEARER_TOKEN = os.getenv("QE_BEARER_TOKEN")  # manually obtained token
+QE_BEARER_TOKEN = os.getenv("QE_BEARER_TOKEN")               # static Bearer token; if unset, uses DefaultAzureCredential
 QE_SCORE_THRESHOLD = float(os.getenv("QE_SCORE_THRESHOLD", "0.7"))  # flag strings below this
 
 # Minimum number of words extracted before an asset is considered localizable

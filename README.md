@@ -20,7 +20,10 @@ Source image (en-US)
   OCR extraction          <- Azure AI Document Intelligence or EasyOCR (local)
        |
        v                  <- NoLoc: no text found → copy to output/no-loc/
-  LLM translation         <- Azure AI Foundry (preferred) or OpenAI (dev fallback)
+  LLM translation         <- Azure OpenAI (az login)
+       |
+       v
+  Layout refinement       <- second LLM pass: condense strings that overflow their bbox
        |
        v
   QE scoring              <- LLMQualityEstimation service (dev)
@@ -29,10 +32,10 @@ Source image (en-US)
   Text reinsertion        <- Pillow (auto-fit font, skip non-translatable strings)
        |
        v
-  MATUA review ZIP        <- original + localized + text mapping + QE scores
+  MATUA review ZIP        <- created only if QE flagged strings (or QE disabled)
        |
        v
-  Supplier review         <- Pass -> done / Fail -> escalate or NoLoc fallback
+  Supplier review         <- QE pass -> no review needed / QE flag -> human review
 ```
 
 ---
@@ -78,8 +81,9 @@ LLMArtLocalization/
 +-- pipeline/
 |   +-- eligibility.py            # Step 1:  file type check
 |   +-- extractor.py              # Step 3:  OCR text extraction + bounding boxes
-|   +-- translator.py             # Step 4:  LLM translation (Foundry or OpenAI)
-|   +-- qe_client.py              # Step 4b: QE quality scoring
+|   +-- translator.py             # Step 4:  LLM translation (Azure OpenAI)
+|   +-- layout_refiner.py        # Step 4b: LLM condensation pass for overflowing strings
+|   +-- qe_client.py              # Step 4c: QE quality scoring
 |   +-- reinsert.py               # Step 5:  text reinsertion into asset
 |   +-- packager.py               # Step 6:  MATUA review ZIP creation
 |   +-- metrics.py                # Step 10: pass/fail/escalation logging
@@ -128,7 +132,7 @@ Opens in your browser automatically. Features:
 
 - **Multi-image upload** — select one or more PNG / JPG source images at once
 - **Language selector** — multiselect showing only currently enabled languages (Italian for Phase 1); more languages added to the selector as each phase activates
-- **Sidebar** shows which backends are active (Foundry / OpenAI / QE) with status indicators
+- **Sidebar** shows which backends are active (Translator / OCR / QE) with status indicators
 - **Scrollable comparison strip** — original and all localizations shown side by side; scroll horizontally to compare when multiple languages are selected
 - **Language switcher** — click a language button below the strip to see its QE score, translations table, and downloads — updates live without re-running
 - **NoLoc handling** — images with no localizable text are skipped and saved to `output/no-loc/`
@@ -159,16 +163,16 @@ Sample output:
 
 ```
 Source      : en-US
-Target      : it-IT
-Translator  : OpenAI
-QE scoring  : enabled (dev)
+Target      : ['it-IT']
+Translator  : Azure OpenAI (az login) — model: gpt-4o-global
+QE scoring  : enabled (az login)
 
 ============================================================
   select-everyone.png
 ============================================================
   Blocks extracted : 16  |  Localizable : True
 
-  Translating via OpenAI (it-IT)...
+  Translating via Azure OpenAI (az login) — model: gpt-4o-global (it-IT)...
 
   Scoring translations via QE (dev)...
 
@@ -262,60 +266,82 @@ To set up Azure AI Document Intelligence:
 
 ## Translation Backend
 
-Two backends are supported. **Foundry takes priority** if both are configured.
-
 | Condition | Backend | Auth |
 |-----------|---------|------|
-| `AZURE_FOUNDRY_ENDPOINT` set | Azure AI Foundry | `az login` / Managed Identity |
-| `OPENAI_API_KEY` set (Foundry not set) | OpenAI | API key |
-| Neither set | Stub `[IT: original text]` | None |
-
-### Option 1 — Azure AI Foundry (preferred)
-
-Enterprise-safe, no personal API keys, auth via `az login`.
+| `AZURE_OPENAI_ENDPOINT` set | Azure OpenAI | `az login` / Managed Identity |
+| Nothing set | Stub `[IT: original text]` | None |
 
 ```env
-AZURE_FOUNDRY_ENDPOINT=https://<your-foundry-resource>.services.ai.azure.com/models
-AZURE_FOUNDRY_MODEL=claude-sonnet-4-6
+AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-4o-global
+AZURE_OPENAI_API_VERSION=2024-08-01-preview
 ```
 
-To set up:
-1. Go to [ai.azure.com](https://ai.azure.com)
-2. Open your project -> **Deployments** -> deploy a model (Claude or GPT)
-3. Copy the endpoint into `.env`
-4. Run `az login` — no key needed
+Run `az login` — no API key needed.
 
-### Option 2 — OpenAI (dev fallback)
+---
 
-Use when Foundry access is not available.
+## LLM Translation — How It Works
 
-```env
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o        # or gpt-4o-mini for lower cost
+Translation uses two sequential LLM calls (Azure OpenAI / GPT-4o) with structured output.
+
+### Call 1 — Translation (`pipeline/translator.py`)
+
+Text blocks are chunked into batches of ≤ 20 and sent with a per-string character budget
+derived from each block's bounding box width:
+
 ```
+Translate the following UI strings from en-US to it-IT.
+
+Rules:
+- Stay within the character budget shown in [max N chars] for each string
+- Preserve UI placeholders like {0}, %s, %1, <variable> exactly as-is
+- Keep proper nouns, product names, and brand names unchanged
+- Match the tone and brevity of UI strings (short, clear, imperative)
+
+Return a JSON object with a "translations" array containing exactly 3 translated strings.
+
+Strings to translate:
+1. [max 8 chars] Save
+2. [max 25 chars] Open file
+3. [max 12 chars] Cancel
+```
+
+The response is a Pydantic-validated JSON object (`{"translations": [...]}`) — no text parsing required. An optional glossary section can be injected to enforce specific term translations.
+
+### Call 2 — Layout Refinement (`pipeline/layout_refiner.py`)
+
+After translation, each string is checked against its source bounding box pixel budget. Strings that still overflow or whose bounding boxes overlap (after the space-aware Call 1) trigger a second LLM call to condense them:
+
+```
+0. source="Save" | current="Salvare il documento" | max_chars=8 | reason=overflow
+```
+
+The response is a Pydantic-validated JSON object (`{"condensed": [...]}`). The LLM is instructed to shorten as little as possible, use standard UI abbreviations for the target language, and never switch to English. Because Call 1 already respects pixel budgets, this step fires much less often.
+
+### Remaining limitations
+
+| Limitation | Effect |
+|---|---|
+| No UI element type context (button / tooltip / header) | LLM cannot tailor brevity to element type — `element_id` is not populated by extractors |
 
 ---
 
 ## QE Scoring
 
 After translation, each string is scored by the **LLMQualityEstimation** service (dev).
-Strings scoring below `QE_SCORE_THRESHOLD` (default: `0.7`) are flagged in the report and in the review package.
+Strings scoring below `QE_SCORE_THRESHOLD` (default: `0.7`) are flagged — and only flagged assets are packaged for MATUA review.
 
 ```env
 QE_ENDPOINT=https://llm-quality-estimation-dev.azurewebsites.net/
-QE_BEARER_TOKEN=<your token>
 QE_SCORE_THRESHOLD=0.7
 ```
 
+Auth uses `DefaultAzureCredential` (same `az login` as the translator — no token needed).
+
+> Leave `QE_ENDPOINT` blank to disable QE scoring. Assets will always be packaged for review when QE is disabled.
+
 > Do not include `.scm.` in the QE endpoint URL — that is the Kudu deployment portal, not the API.
-
-To get a fresh token:
-```bash
-az account get-access-token --resource api://0da43d3e-94e5-42fe-a9f4-09600ef73478
-```
-Copy the `accessToken` value into `.env` as `QE_BEARER_TOKEN`.
-
-QE scoring is skipped silently if `QE_ENDPOINT` or `QE_BEARER_TOKEN` is not set.
 
 Non-translatable strings (GUIDs, IP addresses, numbers, emails) are automatically excluded from QE scoring — the service receives only meaningful text strings.
 

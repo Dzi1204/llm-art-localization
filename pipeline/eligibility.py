@@ -22,7 +22,12 @@ def check_eligibility(file_path: str) -> dict:
     ext = path.suffix.lower()
 
     if ext in SUPPORTED_EXTENSIONS:
-        asset_type = "pdf" if ext == ".pdf" else "raster"
+        if ext == ".pdf":
+            asset_type = "pdf"
+        elif ext == ".svg":
+            asset_type = "svg"
+        else:
+            asset_type = "raster"
         return {"eligible": True, "reason": f"Supported type: {ext}", "asset_type": asset_type}
 
     return {
