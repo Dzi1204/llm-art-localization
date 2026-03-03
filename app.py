@@ -12,7 +12,7 @@ import streamlit as st
 
 NO_LOC_DIR = Path(__file__).parent / "output" / "no-loc"
 
-from config import SOURCE_LANGUAGE, AZURE_OPENAI_ENDPOINT, AZURE_ENDPOINT, QE_ENDPOINT, QE_BEARER_TOKEN
+from config import SOURCE_LANGUAGE, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT, AZURE_ENDPOINT, QE_ENDPOINT, QE_BEARER_TOKEN
 from pipeline.extractor import extract_text, has_localizable_text
 from pipeline.reinsert import reinsert_raster, reinsert_svg
 from pipeline.packager import create_review_package
@@ -70,7 +70,7 @@ with st.sidebar:
     st.header("Pipeline Status")
 
     if AZURE_OPENAI_ENDPOINT:
-        st.success("🔵 Translator: Azure OpenAI")
+        st.success(f"🔵 Translator: Azure OpenAI — model: `{AZURE_OPENAI_DEPLOYMENT}`")
     else:
         st.warning("🟡 Translator: Stub (set AZURE_OPENAI_ENDPOINT in .env)")
 

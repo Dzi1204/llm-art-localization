@@ -124,7 +124,7 @@ def _translate_via_azure_openai(prompt: str, expected_count: int) -> List[str]:
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=messages,
             response_format=_TranslationResponse,
-            max_tokens=4096,
+            max_completion_tokens=4096,
         )
         translations = response.choices[0].message.parsed.translations
     except BadRequestError:
@@ -134,7 +134,7 @@ def _translate_via_azure_openai(prompt: str, expected_count: int) -> List[str]:
                 model=AZURE_OPENAI_DEPLOYMENT,
                 messages=messages,
                 response_format={"type": "json_object"},
-                max_tokens=4096,
+                max_completion_tokens=4096,
             )
             translations = json.loads(response.choices[0].message.content)["translations"]
         except (BadRequestError, KeyError, json.JSONDecodeError):
@@ -142,7 +142,7 @@ def _translate_via_azure_openai(prompt: str, expected_count: int) -> List[str]:
             response = client.chat.completions.create(
                 model=AZURE_OPENAI_DEPLOYMENT,
                 messages=messages,
-                max_tokens=4096,
+                max_completion_tokens=4096,
             )
             content = response.choices[0].message.content or ""
             # Extract the first JSON object from the response
@@ -174,6 +174,7 @@ def _build_prompt(
 
 Rules:
 - Translate ONLY the text content
+- Do NOT translate single-character UI icons such as ×, ✓, ▶, or decorative symbols — skip them entirely
 - Stay within the character budget shown in [max N chars] for each string
 - Preserve UI placeholders like {{0}}, %s, %1, <variable> exactly as-is
 - Keep proper nouns, product names, and brand names unchanged unless in the glossary

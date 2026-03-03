@@ -220,7 +220,7 @@ def llm_layout_decisions_batch(
         response = client.beta.chat.completions.parse(
             model=model, messages=messages,
             response_format=AllLayoutDecisions,
-            max_tokens=2048,
+            max_completion_tokens=2048,
         )
         return response.choices[0].message.parsed.decisions
     except BadRequestError:
@@ -231,7 +231,7 @@ def llm_layout_decisions_batch(
         response = client.chat.completions.create(
             model=model, messages=messages,
             response_format={"type": "json_object"},
-            max_tokens=2048,
+            max_completion_tokens=2048,
         )
         data = json.loads(response.choices[0].message.content)
         return [LayoutDecision(**d) for d in data["decisions"]]
@@ -240,7 +240,7 @@ def llm_layout_decisions_batch(
 
     # Tier 3: plain text with JSON extraction
     response = client.chat.completions.create(
-        model=model, messages=messages, max_tokens=2048,
+        model=model, messages=messages, max_completion_tokens=2048,
     )
     content = response.choices[0].message.content or ""
     start, end = content.find("{"), content.rfind("}") + 1
@@ -297,7 +297,7 @@ def reinsert_llm_guided(
     # Single LLM call for all regions
     decisions: List[Optional[LayoutDecision]] = [None] * len(active)
     if status_callback:
-        status_callback(f"Asking GPT-4o to layout {len(active)} regions (1 call)...")
+        status_callback(f"Asking {model} to layout {len(active)} regions (1 call)...")
     try:
         batch = llm_layout_decisions_batch(
             client=client, model=model, img=img,

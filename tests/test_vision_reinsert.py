@@ -115,7 +115,7 @@ Return a JSON object with a "regions" array."""
             ]},
         ],
         response_format=VisionExtractionResponse,
-        max_tokens=4096,
+        max_completion_tokens=4096,
     )
 
     return response.choices[0].message.parsed.regions
