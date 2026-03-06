@@ -10,6 +10,7 @@ If neither is set, raises EnvironmentError (caller should use stub translator).
 
 from typing import List, Dict, Optional
 
+from openai import OpenAI
 from config import AZURE_FOUNDRY_ENDPOINT, AZURE_FOUNDRY_MODEL, OPENAI_API_KEY, OPENAI_MODEL
 from pipeline.extractor import TextBlock
 
@@ -75,8 +76,6 @@ def _translate_via_foundry(prompt: str) -> str:
 
 
 def _translate_via_openai(prompt: str) -> str:
-    from openai import OpenAI
-
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
